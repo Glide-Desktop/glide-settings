@@ -30,12 +30,12 @@ iced = { version = "0.14.0", default-features = false, features = [
     "advanced",
 ] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
-glide-config = { path = "../glide-config" }
-glide-sdk = { path = "../glide-sdk" }
-glide-app = { path = "../glide-app" }
-glide-ipc = { path = "../glide-ipc" }
-glide-netbird = { path = "../glide-netbird" }
-glide-paint = { path = "../glide-paint" }
+glide-config.workspace = true
+glide-sdk.workspace = true
+glide-app.workspace = true
+glide-ipc.workspace = true
+glide-netbird.workspace = true
+glide-paint.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 base64 = "0.22"
@@ -44,5 +44,5 @@ toml_edit = "0.25"
 zbus.workspace = true
 
 [dev-dependencies]
-glide-theme = { path = "../glide-theme" }
+glide-theme.workspace = true
 iced_tiny_skia = { version = "0.14", default-features = false }
