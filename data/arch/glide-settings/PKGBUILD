@@ -1,0 +1,49 @@
+pkgname=glide-settings
+pkgver=0.1.r0.g0000000
+pkgrel=1
+pkgdesc="Settings app of the Glide desktop"
+arch=(x86_64)
+url="https://github.com/Glide-Desktop/glide-settings"
+license=(GPL-3.0-or-later)
+depends=(
+    glibc gcc-libs libglvnd vulkan-icd-loader wayland libxkbcommon hicolor-icon-theme
+    glide-configd dbus systemd glib2 polkit xdg-utils fontconfig openssl
+    networkmanager bluez bluez-utils accountsservice upower power-profiles-daemon
+    wireplumber libpulse brightnessctl pciutils iw gstreamer
+)
+optdepends=(
+    'cups: Printers'
+    'networkmanager-openvpn: importing OpenVPN connections'
+    'netbird: the NetBird page'
+    'glide-passwords: the Passwords & Autofill page opens the app'
+)
+makedepends=(git cargo pkgconf)
+options=(!lto !debug)
+_git="${GLIDE_GIT:-https://github.com/Glide-Desktop}"
+_target="${GLIDE_CARGO_TARGET:-target}"
+source=("$pkgname::git+$_git/glide-settings.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$pkgname"
+    printf '0.1.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+    cd "$pkgname"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "$pkgname"
+    export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR="$_target"
+    cargo build --frozen --release -p glide-settings
+}
+
+package() {
+    cd "$pkgname"
+    install -Dm755 $_target/release/glide-settings "$pkgdir/usr/bin/glide-settings"
+    install -Dm644 data/glide-settings.desktop "$pkgdir/usr/share/applications/glide-settings.desktop"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
