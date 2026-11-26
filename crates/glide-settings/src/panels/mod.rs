@@ -49,6 +49,7 @@ pub struct Ctx {
     pub lang: Lang,
     pub writable: bool,
     pub online: bool,
+    pub focused: bool,
 }
 
 impl Ctx {

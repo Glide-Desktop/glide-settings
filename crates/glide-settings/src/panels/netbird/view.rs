@@ -1210,6 +1210,7 @@ mod tests {
             lang: crate::i18n::Lang::Uk,
             writable: true,
             online: true,
+            focused: true,
         }
     }
 

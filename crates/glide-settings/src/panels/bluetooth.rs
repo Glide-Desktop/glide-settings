@@ -546,6 +546,7 @@ mod tests {
             lang: Lang::Uk,
             writable: true,
             online: true,
+            focused: true,
         };
         let mut state = BluetoothState { powered: true, alias: "laptop".into(), ..BluetoothState::default() };
         assert_eq!(hero_text(&c, &state), ("Увімкнено".into(), "Назва комп’ютера “laptop”".into()));
@@ -567,6 +568,7 @@ mod tests {
             lang: Lang::Uk,
             writable: true,
             online: true,
+            focused: true,
         };
         let device = BtDevice { icon: "audio-headphones".into(), battery: Some(45), ..BtDevice::default() };
         assert_eq!(
@@ -586,6 +588,7 @@ mod tests {
             lang: Lang::Uk,
             writable: true,
             online: true,
+            focused: true,
         };
         let address = "94:DB:00:00:00:3E".to_string();
         let device =

@@ -24,7 +24,7 @@ fn sample(kind: GestureKind, phase: GesturePhase, action: GestureAction, dx: f64
 }
 
 fn ctx(online: bool) -> Ctx {
-    Ctx { theme: App::default().theme, lang: Lang::Uk, writable: true, online }
+    Ctx { theme: App::default().theme, lang: Lang::Uk, writable: true, online, focused: true }
 }
 
 #[test]

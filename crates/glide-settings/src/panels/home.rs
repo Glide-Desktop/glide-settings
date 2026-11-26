@@ -473,7 +473,13 @@ mod tests {
     use crate::theme::{Accent, Appearance, ThemeState};
 
     fn context(appearance: Appearance) -> Ctx {
-        Ctx { theme: ThemeState::new(appearance, Accent::Azurit), lang: Lang::Uk, writable: true, online: true }
+        Ctx {
+            theme: ThemeState::new(appearance, Accent::Azurit),
+            lang: Lang::Uk,
+            writable: true,
+            online: true,
+            focused: true,
+        }
     }
 
     fn access_point() -> network::AccessPoint {

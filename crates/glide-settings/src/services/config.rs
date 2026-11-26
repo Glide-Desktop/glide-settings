@@ -327,6 +327,14 @@ impl ConfigStore {
         self.history = history;
     }
 
+    pub fn discard_unsaved(&mut self) {
+        if let Some(backend) = self.backend.clone()
+            && let Ok(doc) = Self::fresh(&backend)
+        {
+            self.reload(doc);
+        }
+    }
+
     pub fn refresh_if_changed(&mut self) -> bool {
         let Some(backend) = self.backend.clone() else {
             return false;

@@ -134,6 +134,7 @@ pub struct App {
     pages: Pages,
     netbird: bool,
     width: f32,
+    focused: bool,
 }
 
 pub const COMPACT_BELOW: f32 = 940.0;
@@ -188,6 +189,7 @@ impl App {
             pages: Pages::default(),
             netbird: false,
             width: 1000.0,
+            focused: true,
         }
     }
 
@@ -313,6 +315,7 @@ impl App {
             lang: self.lang,
             writable: self.config.writable(),
             online: self.online,
+            focused: self.focused,
         }
     }
 
@@ -323,6 +326,7 @@ impl App {
 
     pub fn follow_window(&mut self, window: glide_sdk::window::Window) {
         self.width = window.size.width;
+        self.focused = window.focused;
     }
 
     fn apply_edited_look(&mut self) {
@@ -395,6 +399,8 @@ impl App {
             Ok(true) => Task::batch([task, Task::perform(blocking(ipc::reload), Message::Reloaded)]),
             Err(err) => {
                 self.notice = Some(Notice { text: format!("{}: {err}", K::SaveFailed.text(self.lang)), error: true });
+                self.config.discard_unsaved();
+                self.apply_edited_look();
                 task
             }
         }

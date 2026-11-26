@@ -238,8 +238,8 @@ impl Pane for Page {
         Page::view(self, &c, config.bool_or("general", PREFERRED_KEY, true))
     }
 
-    fn tick(&mut self, _c: Ctx) -> Task<Msg> {
-        let due = scan_due(self.scanned_at, std::time::Instant::now(), self.state.on_battery);
+    fn tick(&mut self, c: Ctx) -> Task<Msg> {
+        let due = c.focused && scan_due(self.scanned_at, std::time::Instant::now(), self.state.on_battery);
         self.refresh(if due { Rescan::Request } else { Rescan::No })
     }
 }
@@ -1113,6 +1113,7 @@ mod tests {
             lang: Lang::Uk,
             writable: true,
             online: true,
+            focused: true,
         };
         let page = populated_page();
         let config = ConfigStore::parse("");

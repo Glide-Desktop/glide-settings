@@ -325,8 +325,13 @@ fn switch_shortcut_labels_cover_every_offered_option() {
 #[test]
 fn the_layout_switch_shows_off_and_keeps_an_unknown_option_when_picked_again() {
     let mut app = app("[input]\nxkb-layout = \"us,ua\"\nxkb-options = \"grp:lwin_toggle,compose:ralt\"\n");
-    let ctx =
-        |app: &App| glide_settings::panels::Ctx { theme: app.theme, lang: Lang::En, writable: true, online: false };
+    let ctx = |app: &App| glide_settings::panels::Ctx {
+        theme: app.theme,
+        lang: Lang::En,
+        writable: true,
+        online: false,
+        focused: true,
+    };
     let (options, current) = keyboard::shortcut_choices(ctx(&app), &app.config().xkb_options());
     assert_eq!(current.label, "grp:lwin_toggle");
     assert_eq!(options[0].label, "Off");
@@ -1049,7 +1054,8 @@ fn keyboard_special_keys_edit_only_their_xkb_option_family() {
 fn keyboard_option_choices_show_an_unknown_current_value() {
     use glide_settings::panels::keyboard::caps_choices;
     let app = app("");
-    let c = glide_settings::panels::Ctx { theme: app.theme, lang: Lang::En, writable: true, online: false };
+    let c =
+        glide_settings::panels::Ctx { theme: app.theme, lang: Lang::En, writable: true, online: false, focused: true };
     let (choices, current) = caps_choices(c, "caps:ctrl_modifier");
     assert_eq!(current.option.as_deref(), Some("caps:ctrl_modifier"));
     assert!(choices.contains(&current));
