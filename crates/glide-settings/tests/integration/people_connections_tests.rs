@@ -218,6 +218,28 @@ fn connections_parse_with_activity_and_autoconnect() {
 }
 
 #[test]
+fn saved_networks_are_ordered_by_priority_and_moving_one_renumbers_the_list() {
+    let profiles = network::parse_connections(
+        "Pixel:p:802-11-wireless::no:yes:0\n\
+         Home:h:802-11-wireless:wlan0:yes:yes:5\n\
+         Glide Hotspot:g:802-11-wireless::no:yes:9\n\
+         Manual:m:802-11-wireless::no:no:7\n\
+         Cafe:c:802-11-wireless::no:yes:0\n\
+         Office VPN:v:vpn::no:yes:3\n",
+    );
+    let order = network::preferred_order(&profiles);
+    let names: Vec<&str> = order.iter().map(|profile| profile.name.as_str()).collect();
+    assert_eq!(names, ["Home", "Cafe", "Pixel"], "the hotspot, manual-only and vpn profiles stay out");
+    assert_eq!(
+        network::moved_priorities(&order, 2, true),
+        [("h".to_string(), 3), ("p".to_string(), 2), ("c".to_string(), 1)],
+        "Pixel goes above Cafe and every row gets a distinct priority"
+    );
+    assert!(network::moved_priorities(&order, 0, true).is_empty(), "the top row cannot go higher");
+    assert!(network::moved_priorities(&order, 2, false).is_empty(), "nor the last lower");
+}
+
+#[test]
 fn radios_and_airplane_mode_follow_nmcli_and_rfkill() {
     assert_eq!(
         network::parse_radios("enabled:disabled:missing:enabled\n"),

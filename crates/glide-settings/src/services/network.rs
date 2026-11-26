@@ -118,23 +118,62 @@ pub struct Profile {
     pub device: String,
     pub active: bool,
     pub autoconnect: bool,
+    pub priority: i32,
 }
 
 #[must_use]
 pub fn parse_connections(text: &str) -> Vec<Profile> {
     text.lines()
         .filter_map(|line| match split_terse(line).as_slice() {
-            [name, uuid, kind, device, active, autoconnect] if !uuid.is_empty() => Some(Profile {
+            [name, uuid, kind, device, active, autoconnect, rest @ ..] if !uuid.is_empty() => Some(Profile {
                 name: name.clone(),
                 uuid: uuid.clone(),
                 kind: kind.clone(),
                 device: device.clone(),
                 active: active == "yes",
                 autoconnect: autoconnect == "yes",
+                priority: rest.first().and_then(|priority| priority.trim().parse().ok()).unwrap_or(0),
             }),
             _ => None,
         })
         .collect()
+}
+
+#[must_use]
+pub fn preferred_order(profiles: &[Profile]) -> Vec<&Profile> {
+    let mut order: Vec<&Profile> = profiles
+        .iter()
+        .filter(|profile| profile.kind == WIFI_KIND && profile.autoconnect && profile.name != HOTSPOT_NAME)
+        .collect();
+    order.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    order
+}
+
+#[must_use]
+pub fn moved_priorities(order: &[&Profile], index: usize, up: bool) -> Vec<(String, i32)> {
+    let target = if up { index.checked_sub(1) } else { Some(index + 1).filter(|next| *next < order.len()) };
+    let Some(target) = target.filter(|_| index < order.len()) else {
+        return Vec::new();
+    };
+    let mut moved = order.to_vec();
+    moved.swap(index, target);
+    let top = i32::try_from(moved.len()).unwrap_or(i32::MAX);
+    moved
+        .iter()
+        .zip((1..=top).rev())
+        .filter(|(profile, priority)| profile.priority != *priority)
+        .map(|(profile, priority)| (profile.uuid.clone(), priority))
+        .collect()
+}
+
+pub(crate) fn set_priorities(changes: &[(String, i32)]) -> Result<String, String> {
+    for (uuid, priority) in changes {
+        run::status(
+            "nmcli",
+            &["connection", "modify", "uuid", uuid, "connection.autoconnect-priority", &priority.to_string()],
+        )?;
+    }
+    Ok(String::new())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -602,9 +641,12 @@ pub(crate) fn set_connectivity_check(on: bool) -> Result<String, String> {
 }
 
 fn read_profiles() -> Vec<Profile> {
-    run::output("nmcli", &["-t", "-f", "NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT", "connection", "show"])
-        .map(|text| parse_connections(&text))
-        .unwrap_or_default()
+    run::output(
+        "nmcli",
+        &["-t", "-f", "NAME,UUID,TYPE,DEVICE,ACTIVE,AUTOCONNECT,AUTOCONNECT-PRIORITY", "connection", "show"],
+    )
+    .map(|text| parse_connections(&text))
+    .unwrap_or_default()
 }
 
 #[must_use]

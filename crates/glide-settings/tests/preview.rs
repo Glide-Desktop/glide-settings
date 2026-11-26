@@ -105,6 +105,9 @@ fn fixture_network(app: &mut App) {
         networks: vec![point("Дім", 82, true), point("Pixel_4443", 70, false), point("Кав'ярня", 40, false)],
         on_battery: true,
         connectivity_check: Some(false),
+        profiles: glide_settings::services::network::parse_connections(
+            "Дім:h:802-11-wireless:wlan0:yes:yes:2\nPixel_4443:p:802-11-wireless::no:yes:1\nКав'ярня «Мрія» на Подолі:c:802-11-wireless::no:yes:0\n",
+        ),
         ..NetworkState::default()
     };
     let _ = app.update(Message::Network(Msg::Loaded(0, state)));

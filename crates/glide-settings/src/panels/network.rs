@@ -38,6 +38,10 @@ mod tr {
         PreferredNetworksHint => "Leave a phone hotspot or a less preferred network once a saved one is in range", "Залишати роздачу з телефона чи менш пріоритетну мережу, коли поруч збережена";
         SignInPages => "Detect sign-in pages", "Розпізнавати сторінки входу";
         SignInPagesHint => "Notice when a network asks you to sign in, as in hotels and cafés", "Помічати, коли мережа просить увійти, як у готелях і кафе";
+        Order => "Network order", "Порядок мереж";
+        OrderHint => "Higher ones win", "Вищі мають перевагу";
+        MoveUp => "Move up", "Вище";
+        MoveDown => "Move down", "Нижче";
         NoNetworks => "No networks in range", "Немає мереж поблизу";
         Connected => "Connected", "Підключено";
         Connecting => "Connecting…", "Підключення…";
@@ -120,6 +124,7 @@ pub enum Msg {
     Loaded(u64, NetworkState),
     DetailsLoaded(u64, Details),
     PreferredNetworks(bool),
+    MovePreferred(usize, bool),
     ConnectivityCheck(bool),
     ToggleWifi(bool),
     Airplane(bool),
@@ -452,6 +457,18 @@ impl Page {
                 self.state.connectivity_check = Some(on);
                 return self.run(None, move || network::set_connectivity_check(on));
             }
+            Msg::MovePreferred(index, up) => {
+                let changes = network::moved_priorities(&network::preferred_order(&self.state.profiles), index, up);
+                if changes.is_empty() {
+                    return Task::none();
+                }
+                for profile in &mut self.state.profiles {
+                    if let Some((_, priority)) = changes.iter().find(|(uuid, _)| *uuid == profile.uuid) {
+                        profile.priority = *priority;
+                    }
+                }
+                return self.run(None, move || network::set_priorities(&changes));
+            }
             Msg::ProxyMode(mode) => {
                 let before = self.proxy.clone();
                 self.proxy.mode = mode;
@@ -521,6 +538,7 @@ impl Page {
             error_banner(t, error),
             self.radio_on().then(|| self.nearby(c)),
             self.automatic(c, preferred),
+            self.order(c),
             self.other(c)
         ]
         .spacing(theme::SECTION_GAP)
@@ -543,6 +561,41 @@ impl Page {
                 group.push(switch_row(*c, c.t(T::SignInPages), c.t(T::SignInPagesHint), on, Msg::ConnectivityCheck));
         }
         group.into()
+    }
+
+    fn order(&self, c: &Ctx) -> Option<Element<'_, Msg>> {
+        let t = c.theme;
+        let order = network::preferred_order(&self.state.profiles);
+        if order.len() < 2 {
+            return None;
+        }
+        let mut group = Group::new(t).title(c.t(T::Order)).description(c.t(T::OrderHint));
+        let last = order.len() - 1;
+        for (index, profile) in order.iter().enumerate() {
+            let buttons = row![
+                sdk::icon_button(
+                    &t.paint,
+                    Icon::ArrowUp,
+                    c.t(T::MoveUp),
+                    (index > 0).then_some(Msg::MovePreferred(index, true)),
+                    false
+                ),
+                sdk::icon_button(
+                    &t.paint,
+                    Icon::ArrowDown,
+                    c.t(T::MoveDown),
+                    (index < last).then_some(Msg::MovePreferred(index, false)),
+                    false
+                ),
+            ]
+            .spacing(4);
+            let mut line = Row::new(t, &profile.name).suffix(buttons);
+            if profile.active {
+                line = line.subtitle(c.t(T::Connected));
+            }
+            group = group.push(line.build());
+        }
+        Some(group.into())
     }
 
     const fn radio_on(&self) -> bool {
