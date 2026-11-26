@@ -80,6 +80,36 @@ fn fixture_vpn(app: &mut App) {
     let _ = app.update(Message::Vpn(Msg::Loaded(0, state)));
 }
 
+fn fixture_network(app: &mut App) {
+    use glide_settings::panels::network::Msg;
+    use glide_settings::services::network::{AccessPoint, NetworkState};
+
+    let point = |ssid: &str, signal: u8, in_use: bool| AccessPoint {
+        ssid: ssid.into(),
+        signal,
+        secured: true,
+        in_use,
+        known: in_use,
+        profile: None,
+        security: "WPA2".into(),
+        frequency: 5180,
+        channel: 36,
+        rate: 540,
+    };
+    let state = NetworkState {
+        available: true,
+        wifi_enabled: true,
+        wifi_hardware: true,
+        wifi_device: Some("wlan0".into()),
+        wifi_list_read: true,
+        networks: vec![point("Дім", 82, true), point("Pixel_4443", 70, false), point("Кав'ярня", 40, false)],
+        on_battery: true,
+        connectivity_check: Some(false),
+        ..NetworkState::default()
+    };
+    let _ = app.update(Message::Network(Msg::Loaded(0, state)));
+}
+
 fn fixture_displays(app: &mut App) {
     use glide_settings::panels::displays::Msg;
     use glide_settings::services::display::{Backlight, DisplayState};
@@ -443,6 +473,9 @@ fn fixture_panel(app: &mut App, panel: Panel) {
     }
     if panel == Panel::Vpn && std::env::var_os("GLIDE_SETTINGS_VPN_FIXTURE").is_some() {
         fixture_vpn(app);
+    }
+    if panel == Panel::Network && std::env::var_os("GLIDE_SETTINGS_NETWORK_FIXTURE").is_some() {
+        fixture_network(app);
     }
     if panel == Panel::Sound && std::env::var_os("GLIDE_SETTINGS_SOUND_FIXTURE").is_some() {
         fixture_sound(app);

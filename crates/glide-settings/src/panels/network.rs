@@ -2,7 +2,7 @@ use glide_sdk::widget::{self as sdk, Fact};
 use iced::widget::{column, container, row};
 use iced::{Alignment, Element, Task};
 
-use super::common::{Choice, error_banner};
+use super::common::{Choice, error_banner, switch_row};
 use super::{Category, Ctx, Pane};
 use crate::i18n::{Key as K, Lang};
 use crate::icons::Icon;
@@ -33,6 +33,11 @@ mod tr {
         Nearby => "Networks nearby", "Мережі поруч";
         Updated => "Updated", "Оновлено";
         FewerScans => "Fewer scans on battery", "Від батареї пошук рідше";
+        AutomaticGroup => "Automatically", "Автоматично";
+        PreferredNetworks => "Switch to preferred networks", "Переходити на пріоритетні мережі";
+        PreferredNetworksHint => "Leave a phone hotspot or a less preferred network once a saved one is in range", "Залишати роздачу з телефона чи менш пріоритетну мережу, коли поруч збережена";
+        SignInPages => "Detect sign-in pages", "Розпізнавати сторінки входу";
+        SignInPagesHint => "Notice when a network asks you to sign in, as in hotels and cafés", "Помічати, коли мережа просить увійти, як у готелях і кафе";
         NoNetworks => "No networks in range", "Немає мереж поблизу";
         Connected => "Connected", "Підключено";
         Connecting => "Connecting…", "Підключення…";
@@ -114,6 +119,8 @@ enum Prompt {
 pub enum Msg {
     Loaded(u64, NetworkState),
     DetailsLoaded(u64, Details),
+    PreferredNetworks(bool),
+    ConnectivityCheck(bool),
     ToggleWifi(bool),
     Airplane(bool),
     ToggleDetails,
@@ -174,6 +181,7 @@ pub struct Page {
 const METERED: [Metered; 3] = [Metered::Auto, Metered::Yes, Metered::No];
 const PROXY_MODES: [ProxyMode; 3] = [ProxyMode::None, ProxyMode::Manual, ProxyMode::Auto];
 const FIELD_WIDTH: f32 = 220.0;
+const PREFERRED_KEY: &str = "switch-to-preferred-networks";
 
 impl Pane for Page {
     type Msg = Msg;
@@ -213,12 +221,16 @@ impl Pane for Page {
         ])
     }
 
-    fn update(&mut self, msg: Msg, _c: Ctx, _config: &mut ConfigStore) -> Task<Msg> {
+    fn update(&mut self, msg: Msg, _c: Ctx, config: &mut ConfigStore) -> Task<Msg> {
+        if let Msg::PreferredNetworks(on) = msg {
+            config.set_bool("general", PREFERRED_KEY, on);
+            return Task::none();
+        }
         Page::update(self, msg)
     }
 
-    fn view<'a>(&'a self, c: Ctx, _config: &'a ConfigStore) -> Element<'a, Msg> {
-        Page::view(self, &c)
+    fn view<'a>(&'a self, c: Ctx, config: &'a ConfigStore) -> Element<'a, Msg> {
+        Page::view(self, &c, config.bool_or("general", PREFERRED_KEY, true))
     }
 
     fn tick(&mut self, _c: Ctx) -> Task<Msg> {
@@ -436,6 +448,10 @@ impl Page {
             }
             Msg::StopHotspot(uuid) => return self.run(None, move || network::stop_profile(&uuid)),
             Msg::ProxyLoaded(proxy) => self.proxy = proxy,
+            Msg::ConnectivityCheck(on) => {
+                self.state.connectivity_check = Some(on);
+                return self.run(None, move || network::set_connectivity_check(on));
+            }
             Msg::ProxyMode(mode) => {
                 let before = self.proxy.clone();
                 self.proxy.mode = mode;
@@ -449,7 +465,7 @@ impl Page {
                 self.proxy = before;
                 self.jobs.error = Some(err);
             }
-            Msg::ProxyApplied(..) => {}
+            Msg::ProxyApplied(..) | Msg::PreferredNetworks(_) => {}
             Msg::Done(result) => {
                 self.jobs.finish(result);
                 return self.refresh(Rescan::Request);
@@ -485,7 +501,7 @@ impl Page {
         self.jobs.busy.as_deref() == Some(name)
     }
 
-    fn view(&self, c: &Ctx) -> Element<'_, Msg> {
+    fn view(&self, c: &Ctx, preferred: bool) -> Element<'_, Msg> {
         let t = c.theme;
         if !self.state.available {
             return if self.loaded {
@@ -500,9 +516,33 @@ impl Page {
             network::NO_ANSWER => c.t(T::NoAnswer),
             other => other,
         });
-        column![self.hero(c), error_banner(t, error), self.radio_on().then(|| self.nearby(c)), self.other(c)]
-            .spacing(theme::SECTION_GAP)
-            .into()
+        column![
+            self.hero(c),
+            error_banner(t, error),
+            self.radio_on().then(|| self.nearby(c)),
+            self.automatic(c, preferred),
+            self.other(c)
+        ]
+        .spacing(theme::SECTION_GAP)
+        .into()
+    }
+
+    fn automatic(&self, c: &Ctx, preferred: bool) -> Element<'_, Msg> {
+        let mut group = Group::new(c.theme).title(c.t(T::AutomaticGroup));
+        if self.state.wifi_device.is_some() {
+            group = group.push(switch_row(
+                *c,
+                c.t(T::PreferredNetworks),
+                c.t(T::PreferredNetworksHint),
+                preferred,
+                Msg::PreferredNetworks,
+            ));
+        }
+        if let Some(on) = self.state.connectivity_check {
+            group =
+                group.push(switch_row(*c, c.t(T::SignInPages), c.t(T::SignInPagesHint), on, Msg::ConnectivityCheck));
+        }
+        group.into()
     }
 
     const fn radio_on(&self) -> bool {
@@ -542,11 +582,10 @@ impl Page {
         if let Some(read_at) = self.networks_read_at {
             let since = self.scanned_at.unwrap_or(read_at);
             let age = glide_sdk::i18n::ago(since.elapsed().as_secs(), c.lang);
-            let updated = format!("{} {age}", c.t(T::Updated));
             group = group.description(if self.state.on_battery {
-                format!("{} \u{b7} {updated}", c.t(T::FewerScans))
+                format!("{} \u{b7} {age}", c.t(T::FewerScans))
             } else {
-                updated
+                format!("{} {age}", c.t(T::Updated))
             });
         }
         if self.state.networks.is_empty() {

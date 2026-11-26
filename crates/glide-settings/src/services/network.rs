@@ -87,6 +87,7 @@ pub struct NetworkState {
     pub rfkill: bool,
     pub internet: bool,
     pub on_battery: bool,
+    pub connectivity_check: Option<bool>,
 }
 
 impl NetworkState {
@@ -580,7 +581,24 @@ pub fn read(rescan: Rescan) -> NetworkState {
         internet: run::output("nmcli", &["-t", "-f", "CONNECTIVITY", "general"])
             .is_some_and(|text| text.trim() == "full"),
         on_battery: crate::services::power::on_battery(),
+        connectivity_check: connectivity_check(),
     }
+}
+
+fn connectivity_check() -> Option<bool> {
+    let bus = Connection::system().ok()?;
+    let nm = Proxy::new(&bus, NM, NM_PATH, NM).ok()?;
+    if !nm.get_property::<bool>("ConnectivityCheckAvailable").ok()? {
+        return None;
+    }
+    nm.get_property("ConnectivityCheckEnabled").ok()
+}
+
+pub(crate) fn set_connectivity_check(on: bool) -> Result<String, String> {
+    let bus = Connection::system().map_err(|err| err.to_string())?;
+    let nm = Proxy::new(&bus, NM, NM_PATH, NM).map_err(|err| err.to_string())?;
+    nm.set_property("ConnectivityCheckEnabled", on).map_err(|err| zbus::Error::from(err).to_string())?;
+    Ok(String::new())
 }
 
 fn read_profiles() -> Vec<Profile> {
