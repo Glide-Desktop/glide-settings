@@ -32,6 +32,7 @@ mod tr {
         Channel => "channel", "канал";
         Nearby => "Networks nearby", "Мережі поруч";
         Updated => "Updated", "Оновлено";
+        FewerScans => "Fewer scans on battery", "Від батареї пошук рідше";
         NoNetworks => "No networks in range", "Немає мереж поблизу";
         Connected => "Connected", "Підключено";
         Connecting => "Connecting…", "Підключення…";
@@ -150,6 +151,7 @@ pub enum Msg {
 pub struct Page {
     state: NetworkState,
     networks_read_at: Option<std::time::Instant>,
+    scanned_at: Option<std::time::Instant>,
     jobs: Jobs,
     loaded: bool,
     folded: bool,
@@ -206,7 +208,7 @@ impl Pane for Page {
             self.hotspot_ssid = crate::services::system::hostname();
         }
         Task::batch([
-            self.refresh(Rescan::Auto),
+            self.refresh(Rescan::Request),
             Task::perform(blocking(network::read_proxy), |proxy| Msg::ProxyLoaded(proxy.unwrap_or_default())),
         ])
     }
@@ -220,13 +222,26 @@ impl Pane for Page {
     }
 
     fn tick(&mut self, _c: Ctx) -> Task<Msg> {
-        self.refresh(Rescan::No)
+        let due = scan_due(self.scanned_at, std::time::Instant::now(), self.state.on_battery);
+        self.refresh(if due { Rescan::Request } else { Rescan::No })
     }
+}
+
+const SCAN_EVERY: std::time::Duration = std::time::Duration::from_secs(4);
+const SCAN_EVERY_ON_BATTERY: std::time::Duration = std::time::Duration::from_secs(8);
+const TICK_SLACK: std::time::Duration = std::time::Duration::from_millis(500);
+
+fn scan_due(scanned_at: Option<std::time::Instant>, now: std::time::Instant, on_battery: bool) -> bool {
+    let every = if on_battery { SCAN_EVERY_ON_BATTERY } else { SCAN_EVERY };
+    scanned_at.is_none_or(|at| now.saturating_duration_since(at) + TICK_SLACK >= every)
 }
 
 impl Page {
     fn refresh(&mut self, rescan: Rescan) -> Task<Msg> {
         let Some(generation) = self.jobs.start_loading() else { return Task::none() };
+        if rescan == Rescan::Request {
+            self.scanned_at = Some(std::time::Instant::now());
+        }
         Task::perform(blocking(move || network::read(rescan)), move |state| {
             Msg::Loaded(generation, state.unwrap_or_default())
         })
@@ -437,7 +452,7 @@ impl Page {
             Msg::ProxyApplied(..) => {}
             Msg::Done(result) => {
                 self.jobs.finish(result);
-                return self.refresh(Rescan::Auto);
+                return self.refresh(Rescan::Request);
             }
         }
         Task::none()
@@ -525,8 +540,14 @@ impl Page {
         let t = c.theme;
         let mut group = Group::new(t).title(c.t(T::Nearby));
         if let Some(read_at) = self.networks_read_at {
-            let age = glide_sdk::i18n::ago(read_at.elapsed().as_secs(), c.lang);
-            group = group.description(format!("{} {age}", c.t(T::Updated)));
+            let since = self.scanned_at.unwrap_or(read_at);
+            let age = glide_sdk::i18n::ago(since.elapsed().as_secs(), c.lang);
+            let updated = format!("{} {age}", c.t(T::Updated));
+            group = group.description(if self.state.on_battery {
+                format!("{} \u{b7} {updated}", c.t(T::FewerScans))
+            } else {
+                updated
+            });
         }
         if self.state.networks.is_empty() {
             group = group.push(widgets::list_empty(t, Icon::WifiOff, c.t(T::NoNetworks), ""));
@@ -877,6 +898,16 @@ pub(crate) fn ssid_too_long(ssid: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_page_asks_for_a_scan_every_tick_on_mains_and_every_other_on_battery() {
+        let start = std::time::Instant::now();
+        let tick = |n: u32| start + std::time::Duration::from_millis(3990) * n;
+        assert!(scan_due(None, start, false), "opening the page scans at once");
+        assert!(scan_due(Some(start), tick(1), false), "a tick that lands a hair early still scans");
+        assert!(!scan_due(Some(start), tick(1), true));
+        assert!(scan_due(Some(start), tick(2), true));
+    }
 
     #[test]
     fn network_update_time_requires_a_successful_current_list_read() {

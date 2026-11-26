@@ -290,6 +290,15 @@ fn read(path: &Path) -> String {
 }
 
 #[must_use]
+pub(crate) fn on_battery() -> bool {
+    std::fs::read_dir("/sys/class/power_supply").into_iter().flatten().flatten().any(|entry| {
+        let path = entry.path();
+        is_system_battery(&read(&path.join("type")), &read(&path.join("scope")))
+            && read(&path.join("status")).trim() == "Discharging"
+    })
+}
+
+#[must_use]
 pub fn is_system_battery(kind: &str, scope: &str) -> bool {
     kind.trim() == "Battery" && !scope.trim().eq_ignore_ascii_case("device")
 }

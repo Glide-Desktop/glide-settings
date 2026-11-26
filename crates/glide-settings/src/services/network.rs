@@ -86,6 +86,7 @@ pub struct NetworkState {
     pub airplane: bool,
     pub rfkill: bool,
     pub internet: bool,
+    pub on_battery: bool,
 }
 
 impl NetworkState {
@@ -527,19 +528,7 @@ pub fn parse_devices(text: &str) -> (Option<String>, Vec<Wired>) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rescan {
     No,
-    Auto,
-    Yes,
-}
-
-impl Rescan {
-    #[must_use]
-    pub const fn arg(self) -> &'static str {
-        match self {
-            Self::No => "no",
-            Self::Auto => "auto",
-            Self::Yes => "yes",
-        }
-    }
+    Request,
 }
 
 #[must_use]
@@ -548,6 +537,9 @@ pub fn read(rescan: Rescan) -> NetworkState {
         return NetworkState::default();
     };
     let wifi_enabled = radios.wifi;
+    if wifi_enabled && rescan == Rescan::Request {
+        drop(run::status("nmcli", &["device", "wifi", "rescan"]));
+    }
     let (wifi_device, wired) = run::output("nmcli", &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"])
         .map(|text| parse_devices(&text))
         .unwrap_or_default();
@@ -562,16 +554,7 @@ pub fn read(rescan: Rescan) -> NetworkState {
     let networks = if wifi_enabled {
         run::output(
             "nmcli",
-            &[
-                "-t",
-                "-f",
-                "IN-USE,SSID,SIGNAL,SECURITY,FREQ,CHAN,RATE",
-                "device",
-                "wifi",
-                "list",
-                "--rescan",
-                rescan.arg(),
-            ],
+            &["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY,FREQ,CHAN,RATE", "device", "wifi", "list", "--rescan", "no"],
         )
         .map(|text| parse_networks(&text, &known))
     } else {
@@ -596,6 +579,7 @@ pub fn read(rescan: Rescan) -> NetworkState {
         rfkill: !rfkill.is_empty(),
         internet: run::output("nmcli", &["-t", "-f", "CONNECTIVITY", "general"])
             .is_some_and(|text| text.trim() == "full"),
+        on_battery: crate::services::power::on_battery(),
     }
 }
 
