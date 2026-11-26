@@ -34,6 +34,8 @@ mod tr {
         ScrollSpeedHint => "How far one wheel notch or swipe moves content", "Наскільки зсувається вміст за один крок коліщатка чи рух пальців";
         SmoothWheel => "Smooth wheel scrolling", "Плавна прокрутка коліщатком";
         SmoothWheelHint => "Glide each notch instead of jumping, in apps that do not animate it themselves", "Плавно прокручувати кожен крок замість стрибка в застосунках, що не анімують його самі";
+        Momentum => "Scroll momentum", "Інерція прокрутки";
+        MomentumHint => "Content keeps gliding and slows down after the fingers lift", "Вміст ще котиться й сповільнюється, коли пальці відпущено";
         MiddleEmulation => "Middle click by pressing both buttons", "Середній клік натисканням обох кнопок";
         MiddleEmulationHint => "For mice without a wheel button", "Для мишей без кнопки-коліщатка";
         SameSpeed => "Same speed as the mouse", "Та сама швидкість, що й у миші";
@@ -142,6 +144,7 @@ pub enum Msg {
     LeftHanded(bool),
     MiddleEmulation(bool),
     SmoothWheel(bool),
+    Momentum(bool),
     Slide(Slider, f64),
     Commit(Slider),
     Settle(Slider, u64),
@@ -301,6 +304,7 @@ impl Pane for Page {
             Msg::LeftHanded(on) => config.set_bool("input", "left-handed", on),
             Msg::MiddleEmulation(on) => config.set_bool("input", "middle-emulation", on),
             Msg::SmoothWheel(on) => config.set_bool("input", "smooth-wheel", on),
+            Msg::Momentum(on) => config.set_bool("input", "touchpad-momentum", on),
             Msg::Slide(slider, value) => {
                 self.pending[slider.index()] = Some(value);
                 return self.settles[slider.index()].schedule(move |generation| Msg::Settle(slider, generation));
@@ -515,6 +519,13 @@ impl Page {
             .push(profile_row(c, touchpad_profile(config), Msg::TouchpadProfile))
             .push(natural_row(c, touchpad_natural_scroll(config), Msg::TouchpadNatural))
             .push(scroll_row(c, scroll, Slider::TouchpadScroll))
+            .push(switch_row(
+                *c,
+                c.t(T::Momentum),
+                c.t(T::MomentumHint),
+                config.get_bool("input", "touchpad-momentum").unwrap_or(true),
+                Msg::Momentum,
+            ))
             .build()
     }
 
